@@ -1,15 +1,12 @@
-
 import app from "../assets/js/firebase.js";
 
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.0.2/firebase-storage.js";
-import { getDatabase, ref as rtdbRef, set as rtdbSet,update as rtdbUpdate } from "https://www.gstatic.com/firebasejs/9.0.2/firebase-database.js";
+import { getDatabase, ref as rtdbRef, update as rtdbUpdate } from "https://www.gstatic.com/firebasejs/9.0.2/firebase-database.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.0.2/firebase-auth.js";
-
-//send request to server
 
 // Example using AJAX (XMLHttpRequest)
 var xhr = new XMLHttpRequest();
-var url = "http://127.0.0.1:5000/data"; // Replace with your Flask server URL // Your data to send to the server
+var url = "http://127.0.0.1:5000/data"; // Replace with your Flask server URL
 
 xhr.open("POST", url, true);
 xhr.setRequestHeader("Content-Type", "application/json");
@@ -19,10 +16,6 @@ xhr.onreadystatechange = function () {
         console.log(xhr.responseText);
     }
 };
-
-
-
-
 
 const auth = getAuth(app);
 let currentUser = null;
@@ -60,7 +53,7 @@ async function uploadFile(file) {
 
     const timestamp = Date.now();
     const fileName = `image/${timestamp}`;
-    const storageRef = ref(storage, currentUser.uid +'/' + fileName);
+    const storageRef = ref(storage, `${currentUser.uid}/${fileName}`);
     const uploadTask = uploadBytesResumable(storageRef, file);
 
     const progressHTML = `<li class="row" id="progress-${timestamp}">
@@ -89,50 +82,32 @@ async function uploadFile(file) {
             percentText.textContent = `${progress.toFixed(2)}%`;
 
             if (progress === 100) {
-                getDownloadURL(uploadTask.snapshot.ref)
-                    .then(async (downloadURL) => {
-                        // Store file metadata in Realtime Database under user's node
-                        const fileData = {
-                            fileName: fileName,
-                            downloadURL: downloadURL
+                const userRef = rtdbRef(database, `users/${currentUser.uid}`);
+                rtdbUpdate(userRef, { file_uploaded: true });
 
-                        };
-                        await rtdbSet(rtdbRef(database, `users/${currentUser.uid}/files/${timestamp}`), fileData);
-                        const userRef = rtdbRef(database, `users/${currentUser.uid}`);
-                        await rtdbUpdate(userRef, { file_uploaded: true });
-
-
-                        //send request
-                        if (xhr.readyState === XMLHttpRequest.OPENED) {
-                            const data = JSON.stringify({
-                                "uid": currentUser.uid,
-                                "user": currentUser
-                            });
-                            xhr.send(data);
-                        } else {
-                            console.error('XHR object state is not OPENED.');
-                        }
-            
-             
-                        const uploadedHTML = `<li class="row">
-                                                <div class="content upload">
-                                                  <i class="fas fa-file-alt"></i>
-                                                  <div class="details">
-                                                    <span class="name">${fileName} • Uploaded</span>
-                                                    <span class="size">${(snapshot.totalBytes / 1024).toFixed(2)} KB</span>
-                                                  </div>
-                                                </div>
-                                                <i class="fas fa-check"></i>
-                                              </li>`;
-                        uploadedArea.classList.remove('onprogress');
-                        uploadedArea.insertAdjacentHTML('afterbegin', uploadedHTML);
-                        progressArea.removeChild(progressElement);
-                    })
-                
-                
-                    .catch((error) => {
-                        console.error('Error getting download URL:', error);
+                // Send request if the object state is OPENED
+                if (xhr.readyState === XMLHttpRequest.OPENED) {
+                    const data = JSON.stringify({
+                        "user": currentUser
                     });
+                    xhr.send(data);
+                } else {
+                    console.error('XHR object state is not OPENED.');
+                }
+
+                const uploadedHTML = `<li class="row">
+                                        <div class="content upload">
+                                          <i class="fas fa-file-alt"></i>
+                                          <div class="details">
+                                            <span class="name">${fileName} • Uploaded</span>
+                                            <span class="size">${(snapshot.totalBytes / 1024).toFixed(2)} KB</span>
+                                          </div>
+                                        </div>
+                                        <i class="fas fa-check"></i>
+                                      </li>`;
+                uploadedArea.classList.remove('onprogress');
+                uploadedArea.insertAdjacentHTML('afterbegin', uploadedHTML);
+                progressArea.removeChild(progressElement);
             }
         },
         (error) => {
@@ -140,24 +115,3 @@ async function uploadFile(file) {
         }
     );
 }
-
-
-// async function fetchFilesForUser(userId) {
-//     try {
-//         const q = query(collection(firestore, 'files'), where('userId', '==', userId));
-//         const querySnapshot = await getDocs(q);
-//         querySnapshot.forEach((doc) => {
-//             const data = doc.data();
-//             console.log('File:', data.fileName, 'URL:', data.downloadURL);
-//             // You can display or download files here
-//         });
-//     } catch (error) {
-//         console.error('Error fetching files:', error);
-//     }
-// }
-
-// // Example usage:
-// // Fetch files for the current user
-// if (currentUser) {
-//     fetchFilesForUser(currentUser.uid);
-// }
